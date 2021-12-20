@@ -1,0 +1,59 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+jobs:
+  test:
+    name: test
+    env:
+      RUST_BACKTRACE: 1
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            rust: stable
+          - os: ubuntu-20.04
+            rust: beta
+          - os: macos-latest
+            rust: nightly
+          - os: windows-2019
+            rust: nightly
+          - os: windows-2019
+            rust: nightly-x86_64-gnu
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          profile: minimal
+          override: true
+
+      - name: Cargo build
+        run: cargo build --verbose
+
+      - name: Run tests
+        if: matrix.target == ''
+        run: cargo test --verbose
+
+  format:
+    name: rustfmt
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal
+          components: rustfmt
+      - name: Check formatting
+        run: |
+          cargo fmt --all -- --check

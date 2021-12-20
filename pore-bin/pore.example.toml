@@ -1,0 +1,57 @@
+# Update the index before searching
+update = true
+
+# Do not store the text index on disk (will have to rebuild every time)
+in_memory = false
+
+# Search hidden files and directories
+hidden = false
+
+# Follow symbolic links
+follow = false
+
+# The language to use for parsing files
+language = "English"
+
+# Include or exclude files and directories for searching that match the given glob.
+# This always overrides any other ignore logic. Multiple glob flags may be used.
+# Precede a glob with a ! to exclude it.
+glob = []
+
+# Only search files that match this glob.
+# Files that do not match any of these globs will be ignored.
+oglob = []
+
+# Patterns passed to --glob and --oglob will be matched in a case-insentive way.
+glob_case_insensitive = false
+
+# The approximate number of threads to use.
+# A value of 0 (which is the default) will choose the thread count using heuristics.
+threads = 0
+
+# Force rebuild the index before searching
+rebuild_index = false
+
+# Maximum number of files to return
+limit = 1000
+
+# Minimum score threshold for results
+threshold = 0.0
+
+# Print the results as json
+json = false
+
+# Respect .gitignore files when building the index
+ignore_files = true
+
+# This flag controls when to use colors. The default setting is auto, which will try to guess when to use colors.
+#    The possible values for this flag are:
+#
+#        never    Colors will never be used.
+#        auto     Auto-detect if the terminal supports colors (default).
+#        always   Colors will always be used regardless of where output is sent.
+#        ansi     Like 'always', but emits ANSI escapes (even in a Windows console).
+color = "auto"
+
+# Print out the files that match the search (not the matching lines).
+filename_only = false
