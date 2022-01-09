@@ -5,15 +5,15 @@ use args::CmdArg;
 use config::load_config;
 use config::{IndexConfig, SearchConfig};
 use ignore::WalkState;
-use index::FileIndex;
-use std::error;
+use pore_core::FileIndex;
+use std::path::{Path, PathBuf};
 use std::process;
+use std::{env, error};
 use tantivy::query::QueryParser;
 
 mod args;
 mod color_mode;
 mod config;
-mod index;
 mod output;
 
 fn main() {
@@ -44,7 +44,16 @@ fn run_cmd() -> Result<bool, Box<dyn error::Error>> {
     let index: IndexConfig = index_opt.into();
     let search: SearchConfig = search_opt.into();
 
-    let mut index = FileIndex::get_or_create(&conf.query_path, &index, conf.index_name.as_deref())?;
+    let cache_dir = if index.in_memory {
+        None
+    } else {
+        Some(find_index_dir(
+            &conf.query_path,
+            conf.index_name.as_deref(),
+        )?)
+    };
+    let mut index =
+        FileIndex::get_or_create(&conf.query_path, cache_dir.as_deref(), &index.into())?;
 
     match conf.command {
         CmdArg::Delete => {
@@ -74,7 +83,7 @@ fn run_cmd() -> Result<bool, Box<dyn error::Error>> {
             if let Some(query) = conf.query {
                 let query_parser = QueryParser::for_index(&index.index(), vec![*index.contents()]);
                 let query = query_parser.parse_query(&query)?;
-                let (searcher, results) = index.search(&query, &search)?;
+                let (searcher, results) = index.search(&query, search.limit, search.threshold)?;
                 return output::print_results(
                     &conf.search_dir,
                     index,
@@ -88,4 +97,26 @@ fn run_cmd() -> Result<bool, Box<dyn error::Error>> {
             }
         }
     }
+}
+
+fn find_index_dir(
+    for_dir: &Path,
+    index_name: Option<&str>,
+) -> Result<PathBuf, Box<dyn error::Error>> {
+    let mut cache_home = env::var("XDG_CACHE_HOME").unwrap_or("".to_string());
+    if cache_home == "" {
+        cache_home = env::var("HOME")? + "/.cache";
+    }
+    let mut index_root = PathBuf::from(cache_home);
+    index_root.push(env!("CARGO_PKG_NAME"));
+    if for_dir.is_absolute() {
+        index_root.push(for_dir.strip_prefix("/")?);
+    } else {
+        index_root.push(env::current_dir()?.strip_prefix("/")?);
+        index_root.push(for_dir)
+    }
+    if let Some(name) = index_name {
+        index_root.push(format!("__index_{}", name));
+    }
+    return Ok(index_root);
 }

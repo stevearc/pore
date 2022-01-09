@@ -6,8 +6,6 @@ edition = "2021"
 readme = "README.md"
 license = "MIT"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 atty = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
@@ -19,6 +17,7 @@ tantivy = "0.16.1"
 termcolor = "1.1"
 toml = "0.5"
 macros = { path = "../macros" }
+pore-core = { path = "../pore-core" }
 simple-error = "0.2"
 
 [dev-dependencies]

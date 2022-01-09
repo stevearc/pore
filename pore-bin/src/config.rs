@@ -1,4 +1,5 @@
 use macros::create_option_copy;
+use pore_core::IndexOptions;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::error;
@@ -37,6 +38,21 @@ impl Default for IndexConfig {
             oglob: vec![],
             threads: 0,
             in_memory: false,
+        };
+    }
+}
+
+impl Into<IndexOptions> for IndexConfig {
+    fn into(self) -> IndexOptions {
+        return IndexOptions {
+            follow: self.follow,
+            hidden: self.hidden,
+            language: self.language,
+            ignore_files: self.ignore_files,
+            glob_case_insensitive: self.glob_case_insensitive,
+            glob: self.glob.clone(),
+            oglob: self.oglob.clone(),
+            threads: self.threads,
         };
     }
 }

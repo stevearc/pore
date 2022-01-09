@@ -1,5 +1,3 @@
-use crate::config::IndexConfig;
-use crate::config::SearchConfig;
 use chrono::DateTime;
 use chrono::Local;
 use chrono::NaiveDateTime;
@@ -27,21 +25,34 @@ use tantivy::schema::*;
 use tantivy::tokenizer::*;
 use tantivy::Index;
 
+#[derive(Debug)]
 pub struct FileIndex {
     meta: Metadata,
-    index_dir: PathBuf,
+    index_dir: Option<PathBuf>,
     index: Index,
     filepath: Field,
     contents: Field,
     need_rebuild: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub struct IndexOptions {
+    pub follow: bool,
+    pub glob: Vec<String>,
+    pub glob_case_insensitive: bool,
+    pub hidden: bool,
+    pub ignore_files: bool,
+    pub language: Language,
+    pub oglob: Vec<String>,
+    pub threads: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Metadata {
     version: String,
     for_dir: PathBuf,
     last_update: DateTime<Utc>,
-    config: IndexConfig,
+    config: IndexOptions,
 }
 
 #[derive(Debug)]
@@ -53,7 +64,16 @@ pub struct DocResult {
 const METADATA_FILE: &str = "pore_meta.json";
 
 impl Metadata {
-    pub fn config(&self) -> &IndexConfig {
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+    pub fn for_dir(&self) -> &Path {
+        &self.for_dir
+    }
+    pub fn last_update(&self) -> &DateTime<Utc> {
+        &self.last_update
+    }
+    pub fn config(&self) -> &IndexOptions {
         &self.config
     }
 }
@@ -69,50 +89,33 @@ impl FileIndex {
         &self.contents
     }
     pub fn delete(&self) -> Result<(), Box<dyn error::Error>> {
-        if !self.index_dir.exists() {
-            return Ok(());
+        match &self.index_dir {
+            None => return Ok(()),
+            Some(index_dir) => {
+                if !index_dir.exists() {
+                    return Ok(());
+                }
+                eprintln!("Removing index files");
+                let mut index_writer = self.index.writer(50_000_000)?;
+                index_writer.delete_all_documents()?;
+                index_writer.commit()?;
+                let metafile = index_dir.join(METADATA_FILE);
+                fs::remove_file(metafile).ok();
+                fs::remove_dir(&index_dir).ok();
+                Ok(())
+            }
         }
-        eprintln!("Removing index files");
-        let mut index_writer = self.index.writer(50_000_000)?;
-        index_writer.delete_all_documents()?;
-        index_writer.commit()?;
-        let metafile = self.index_dir.join(METADATA_FILE);
-        fs::remove_file(metafile).ok();
-        fs::remove_dir(&self.index_dir).ok();
-        Ok(())
-    }
-    fn find_index_dir(
-        for_dir: &Path,
-        index_name: Option<&str>,
-    ) -> Result<PathBuf, Box<dyn error::Error>> {
-        let mut cache_home = env::var("XDG_CACHE_HOME").unwrap_or("".to_string());
-        if cache_home == "" {
-            cache_home = env::var("HOME")? + "/.cache";
-        }
-        let mut index_root = PathBuf::from(cache_home);
-        index_root.push(env!("CARGO_PKG_NAME"));
-        if for_dir.is_absolute() {
-            index_root.push(for_dir.strip_prefix("/")?);
-        } else {
-            index_root.push(env::current_dir()?.strip_prefix("/")?);
-            index_root.push(for_dir)
-        }
-        if let Some(name) = index_name {
-            index_root.push(format!("__index_{}", name));
-        }
-        return Ok(index_root);
     }
     pub fn get_or_create(
         for_dir: &Path,
-        config: &IndexConfig,
-        index_name: Option<&str>,
+        cache_dir: Option<&Path>,
+        config: &IndexOptions,
     ) -> Result<Self, Box<dyn error::Error>> {
-        let mut index_dir = FileIndex::find_index_dir(&for_dir, index_name)?;
-        let metafile = index_dir.join(METADATA_FILE);
         let mut meta: Metadata;
         let mut need_rebuild = false;
-        if !config.in_memory && metafile.exists() {
-            meta = serde_json::from_str(&fs::read_to_string(metafile)?)?;
+        let metafile = cache_dir.map(|p| p.join(METADATA_FILE));
+        if metafile.as_deref().map(|p| p.exists()).unwrap_or(false) {
+            meta = serde_json::from_str(&fs::read_to_string(metafile.unwrap())?)?;
             if meta.config() != config {
                 need_rebuild = true;
                 meta.config = config.clone();
@@ -148,18 +151,20 @@ impl FileIndex {
         let schema = schema_builder.build();
 
         let index;
-        if config.in_memory {
-            index = Index::create_in_ram(schema.clone());
-        } else {
-            fs::create_dir_all(&index_dir)?;
-            index = Index::open_or_create(MmapDirectory::open(&index_dir)?, schema.clone())?;
-            index_dir = fs::canonicalize(index_dir)?;
+        match cache_dir {
+            None => {
+                index = Index::create_in_ram(schema.clone());
+            }
+            Some(index_dir) => {
+                fs::create_dir_all(&index_dir)?;
+                index = Index::open_or_create(MmapDirectory::open(&index_dir)?, schema.clone())?;
+            }
         }
         index.tokenizers().register(&tokenizer_name, tokenizer);
 
         Ok(Self {
             index,
-            index_dir,
+            index_dir: cache_dir.map(|p| fs::canonicalize(p).unwrap()),
             meta,
             filepath: schema.get_field("filepath").unwrap(),
             contents: schema.get_field("contents").unwrap(),
@@ -229,9 +234,9 @@ impl FileIndex {
 
         index_writer.commit()?;
         self.meta.last_update = now;
-        if self.index_dir.exists() {
+        if let Some(index_dir) = &self.index_dir {
             fs::write(
-                self.index_dir.join(METADATA_FILE),
+                index_dir.join(METADATA_FILE),
                 serde_json::to_string(&self.meta)?,
             )?;
         }
@@ -242,7 +247,8 @@ impl FileIndex {
     pub fn search(
         &self,
         query: &Box<dyn Query>,
-        config: &SearchConfig,
+        limit: usize,
+        threshold: f32,
     ) -> tantivy::Result<(LeasedItem<Searcher>, Vec<DocResult>)> {
         let reader = self
             .index
@@ -250,10 +256,10 @@ impl FileIndex {
             .reload_policy(ReloadPolicy::OnCommit)
             .try_into()?;
         let searcher = reader.searcher();
-        let top_docs = searcher.search(query, &TopDocs::with_limit(config.limit))?;
+        let top_docs = searcher.search(query, &TopDocs::with_limit(limit))?;
         let mut results = Vec::new();
         for (score, doc_address) in top_docs {
-            if score > config.threshold {
+            if score > threshold {
                 results.push(DocResult {
                     score,
                     address: doc_address,
@@ -268,17 +274,17 @@ impl Display for FileIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Index({:?})", self.meta.for_dir)?;
         writeln!(f, "  version: {}", self.meta.version)?;
-        if self.meta.config.in_memory {
-            writeln!(f, "  location: in-memory")?;
-        } else {
-            writeln!(f, "  location: {:?}", &self.index_dir)?;
+        if let Some(index_dir) = &self.index_dir {
+            writeln!(f, "  location: {:?}", index_dir)?;
             writeln!(
                 f,
                 "  last updated: {}",
                 DateTime::<Local>::from(self.meta.last_update)
             )?;
+        } else {
+            writeln!(f, "  location: in-memory")?;
         }
-        for field in toml::to_string(&self.meta.config)
+        for field in serde_json::to_string(&self.meta.config)
             .unwrap_or("".to_string())
             .split("\n")
         {

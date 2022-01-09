@@ -7,6 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use pore_core::{DocResult, FileIndex};
 use serde::Serialize;
 use tantivy::{
     query::Query, schema::IndexRecordOption, DocAddress, DocSet, LeasedItem, Postings, Searcher,
@@ -14,10 +15,7 @@ use tantivy::{
 };
 use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
 
-use crate::{
-    config::SearchConfig,
-    index::{DocResult, FileIndex},
-};
+use crate::config::SearchConfig;
 
 type BytePositions = BinaryHeap<Reverse<u32>>;
 
