@@ -1,15 +1,15 @@
 use macros::create_option_copy;
 use pore_core::IndexOptions;
+use pore_core::SearchOptions;
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::error;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
-use tantivy::tokenizer::Language;
 use toml::Value;
 
 use crate::color_mode::ColorMode;
+use crate::language::LanguageRef;
 const CONFIG_FILE: &str = "pore.toml";
 
 #[create_option_copy(IndexConfigOpt)]
@@ -21,7 +21,7 @@ pub struct IndexConfig {
     pub hidden: bool,
     pub ignore_files: bool,
     pub in_memory: bool,
-    pub language: Language,
+    pub language: LanguageRef,
     pub oglob: Vec<String>,
     pub threads: usize,
 }
@@ -31,7 +31,7 @@ impl Default for IndexConfig {
         return IndexConfig {
             follow: false,
             hidden: false,
-            language: Language::English,
+            language: LanguageRef::English,
             ignore_files: true,
             glob_case_insensitive: false,
             glob: vec![],
@@ -47,7 +47,7 @@ impl Into<IndexOptions> for IndexConfig {
         return IndexOptions {
             follow: self.follow,
             hidden: self.hidden,
-            language: self.language,
+            language: self.language.into(),
             ignore_files: self.ignore_files,
             glob_case_insensitive: self.glob_case_insensitive,
             glob: self.glob.clone(),
@@ -83,10 +83,21 @@ impl Default for SearchConfig {
     }
 }
 
+impl SearchConfig {
+    pub fn to_opts(&self, search_dir: &str) -> SearchOptions {
+        return SearchOptions {
+            limit: self.limit,
+            threshold: self.threshold,
+            filename_only: self.filename_only,
+            root_dir: Some(search_dir.to_string()),
+        };
+    }
+}
+
 pub fn load_config(
     path: &Path,
     index_name: Option<&str>,
-) -> Result<(IndexConfigOpt, SearchConfigOpt), Box<dyn error::Error>> {
+) -> Result<(IndexConfigOpt, SearchConfigOpt), anyhow::Error> {
     let path_str = path.to_string_lossy();
     let mut config_home = env::var("XDG_CONFIG_HOME").unwrap_or("".to_string());
     if config_home == "" {
@@ -131,7 +142,7 @@ pub fn load_config(
             }
         }
         if index_name.is_some() && !found_index {
-            bail!(format!("Could not find index '{}'", index_name.unwrap()));
+            bail!("Could not find index '{}'", index_name.unwrap());
         }
 
         return Ok((index, search));

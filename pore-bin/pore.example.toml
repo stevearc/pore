@@ -11,7 +11,7 @@ hidden = false
 follow = false
 
 # The language to use for parsing files
-language = "English"
+language = "english"
 
 # Include or exclude files and directories for searching that match the given glob.
 # This always overrides any other ignore logic. Multiple glob flags may be used.

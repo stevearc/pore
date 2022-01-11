@@ -64,6 +64,7 @@ pub fn create_option_copy(
             let expanded = quote!(
                 #input
                 #new_struct
+                // Utility methods for the opt copy
                 impl #copy_name {
                     #[doc = "Set fields from other if not already set"]
                     pub fn merge(self: &mut Self, other: &#copy_name) {
@@ -102,6 +103,30 @@ pub fn create_option_copy(
                         }
                     }
                 }
+
+                // Conversion from Lua value
+                impl<'lua> mlua::FromLua<'lua> for #copy_name {
+                    fn from_lua(lua_value: mlua::Value<'lua>, lua: &'lua mlua::Lua) -> mlua::Result<Self> {
+                        let mut ret = #copy_name::default();
+                        match lua_value {
+                            mlua::Value::Table(table) => {
+                                #(if table.contains_key("#field_names")? {
+                                    ret.#field_names = Some(table.get("#field_names")?);
+                                })*
+                            }
+                            mlua::Value::Nil => {}
+                            _ => {
+                                return Err(mlua::Error::FromLuaConversionError {
+                                    from: lua_value.type_name(),
+                                    to: "#copy_name",
+                                    message: Some("Value is not a table".to_string()),
+                                });
+                            }
+                        }
+                        Ok(ret)
+                    }
+                }
+
                 impl Into<#source_name> for #copy_name {
                     fn into(self) -> #source_name {
                         let mut ret = #source_name::default();
@@ -111,6 +136,7 @@ pub fn create_option_copy(
                         return ret;
                     }
                 }
+
                 impl Default for #copy_name {
                     fn default() -> #copy_name {
                         return #copy_name {

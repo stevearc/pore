@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::{env, error, fs};
+use std::{env, fs};
 
 use clap::ArgGroup;
 use clap::{App, Arg};
-use tantivy::tokenizer::Language;
 
 use crate::color_mode::ColorMode;
 use crate::config::{IndexConfigOpt, SearchConfigOpt};
+use crate::language::LanguageRef;
 
 #[derive(Debug)]
 pub enum CmdArg {
@@ -28,7 +28,7 @@ pub struct GlobalConfig {
     pub index_name: Option<String>,
 }
 
-pub fn parse_args() -> Result<GlobalConfig, Box<dyn error::Error>> {
+pub fn parse_args() -> Result<GlobalConfig, anyhow::Error> {
     let matches = App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
@@ -91,7 +91,7 @@ pub fn parse_args() -> Result<GlobalConfig, Box<dyn error::Error>> {
         .arg(
             Arg::new("language")
                 .long("language")
-                .validator(|a| language_from_str(&a).map(|_|()).ok_or("Invalid language".to_string()))
+                .validator(|a| LanguageRef::from_str(&a))
                 .takes_value(true)
                 .help("The language to use for parsing files"),
         )
@@ -213,7 +213,9 @@ pub fn parse_args() -> Result<GlobalConfig, Box<dyn error::Error>> {
         index.hidden = Some(false);
     }
     if matches.is_present("language") {
-        index.language = Some(language_from_str(matches.value_of("language").unwrap()).unwrap());
+        index.language = Some(LanguageRef::from_str(
+            matches.value_of("language").unwrap(),
+        )?);
     }
     if matches.is_present("follow_links") {
         index.follow = Some(true);
@@ -306,28 +308,4 @@ pub fn parse_args() -> Result<GlobalConfig, Box<dyn error::Error>> {
         search_dir,
         index_name: matches.value_of("index").map(|s| s.to_string()),
     });
-}
-
-fn language_from_str(string: &str) -> Option<Language> {
-    return match string.to_lowercase().as_str() {
-        "arabic" => Some(Language::Arabic),
-        "danish" => Some(Language::Danish),
-        "dutch" => Some(Language::Dutch),
-        "english" => Some(Language::English),
-        "finnish" => Some(Language::Finnish),
-        "french" => Some(Language::French),
-        "german" => Some(Language::German),
-        "greek" => Some(Language::Greek),
-        "hungarian" => Some(Language::Hungarian),
-        "italian" => Some(Language::Italian),
-        "norwegian" => Some(Language::Norwegian),
-        "portuguese" => Some(Language::Portuguese),
-        "romanian" => Some(Language::Romanian),
-        "russian" => Some(Language::Russian),
-        "spanish" => Some(Language::Spanish),
-        "swedish" => Some(Language::Swedish),
-        "tamil" => Some(Language::Tamil),
-        "turkish" => Some(Language::Turkish),
-        _ => None,
-    };
 }

@@ -24,10 +24,10 @@ impl Into<ColorChoice> for ColorMode {
 }
 
 impl FromStr for ColorMode {
-    type Err = String;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
+        match s.to_lowercase().as_str() {
             "always" => Ok(ColorMode::Always),
             "ansi" => Ok(ColorMode::Ansi),
             "auto" => {
@@ -38,7 +38,26 @@ impl FromStr for ColorMode {
                 }
             }
             "never" => Ok(ColorMode::Never),
-            _ => Err("Invalid color value".to_string()),
+            _ => Err(anyhow!("Invalid color value '{}'", s)),
         }
+    }
+}
+
+impl<'lua> mlua::FromLua<'lua> for ColorMode {
+    fn from_lua(lua_value: mlua::Value<'lua>, _lua: &'lua mlua::Lua) -> mlua::Result<Self> {
+        return match &lua_value {
+            mlua::Value::String(str) => ColorMode::from_str(str.to_str()?).map_err(|e| {
+                mlua::Error::FromLuaConversionError {
+                    from: lua_value.type_name(),
+                    to: "ColorMode",
+                    message: Some(e.to_string()),
+                }
+            }),
+            _ => Err(mlua::Error::FromLuaConversionError {
+                from: lua_value.type_name(),
+                to: "ColorMode",
+                message: Some("Value is not a string".to_string()),
+            }),
+        };
     }
 }

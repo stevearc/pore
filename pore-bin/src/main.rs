@@ -1,25 +1,26 @@
 #[macro_use]
-extern crate simple_error;
+extern crate anyhow;
 
 use args::CmdArg;
 use config::load_config;
 use config::{IndexConfig, SearchConfig};
-use ignore::WalkState;
 use pore_core::FileIndex;
+use std::env;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::{env, error};
 use tantivy::query::QueryParser;
 
 mod args;
 mod color_mode;
 mod config;
+mod language;
 mod output;
 
 fn main() {
     match run_cmd() {
         Err(err) => {
             eprintln!("Error: {}", err);
+            eprintln!("{:?}", err.backtrace());
             process::exit(2);
         }
         Ok(false) => {
@@ -29,7 +30,7 @@ fn main() {
     }
 }
 
-fn run_cmd() -> Result<bool, Box<dyn error::Error>> {
+fn run_cmd() -> Result<bool, anyhow::Error> {
     let conf = args::parse_args()?;
     let (mut index_opt, mut search_opt) =
         load_config(&conf.query_path, conf.index_name.as_deref())?;
@@ -62,14 +63,11 @@ fn run_cmd() -> Result<bool, Box<dyn error::Error>> {
         }
         CmdArg::ListFiles => {
             let walker = index.get_file_walker()?;
-            walker.build_parallel().run(|| {
-                Box::new(|result| {
-                    if let Ok(entry) = result {
-                        println!("{}", entry.path().to_string_lossy());
-                    }
-                    WalkState::Continue
-                })
-            });
+            for result in walker.build() {
+                if let Ok(entry) = result {
+                    println!("{}", entry.path().to_string_lossy());
+                }
+            }
             return Ok(true);
         }
         CmdArg::ListIndex => {
@@ -83,15 +81,9 @@ fn run_cmd() -> Result<bool, Box<dyn error::Error>> {
             if let Some(query) = conf.query {
                 let query_parser = QueryParser::for_index(&index.index(), vec![*index.contents()]);
                 let query = query_parser.parse_query(&query)?;
-                let (searcher, results) = index.search(&query, search.limit, search.threshold)?;
-                return output::print_results(
-                    &conf.search_dir,
-                    index,
-                    &query,
-                    searcher,
-                    results,
-                    &search,
-                );
+                let opts = &search.to_opts(&conf.search_dir);
+                let results = index.search(&query, &opts)?;
+                return output::print_results(results, &search);
             } else {
                 return Ok(true);
             }
@@ -99,10 +91,7 @@ fn run_cmd() -> Result<bool, Box<dyn error::Error>> {
     }
 }
 
-fn find_index_dir(
-    for_dir: &Path,
-    index_name: Option<&str>,
-) -> Result<PathBuf, Box<dyn error::Error>> {
+fn find_index_dir(for_dir: &Path, index_name: Option<&str>) -> Result<PathBuf, anyhow::Error> {
     let mut cache_home = env::var("XDG_CACHE_HOME").unwrap_or("".to_string());
     if cache_home == "" {
         cache_home = env::var("HOME")? + "/.cache";
