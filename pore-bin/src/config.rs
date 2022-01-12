@@ -1,7 +1,7 @@
 use macros::create_option_copy;
-use pore_core::IndexOptions;
-use pore_core::SearchOptions;
-use serde::{Deserialize, Serialize};
+use pore_core::FileIndexOptionsShape;
+use pore_core::FileSearchOptions;
+use serde::Deserialize;
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -9,53 +9,7 @@ use std::path::PathBuf;
 use toml::Value;
 
 use crate::color_mode::ColorMode;
-use crate::language::LanguageRef;
 const CONFIG_FILE: &str = "pore.toml";
-
-#[create_option_copy(IndexConfigOpt)]
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct IndexConfig {
-    pub follow: bool,
-    pub glob: Vec<String>,
-    pub glob_case_insensitive: bool,
-    pub hidden: bool,
-    pub ignore_files: bool,
-    pub in_memory: bool,
-    pub language: LanguageRef,
-    pub oglob: Vec<String>,
-    pub threads: usize,
-}
-
-impl Default for IndexConfig {
-    fn default() -> IndexConfig {
-        return IndexConfig {
-            follow: false,
-            hidden: false,
-            language: LanguageRef::English,
-            ignore_files: true,
-            glob_case_insensitive: false,
-            glob: vec![],
-            oglob: vec![],
-            threads: 0,
-            in_memory: false,
-        };
-    }
-}
-
-impl Into<IndexOptions> for IndexConfig {
-    fn into(self) -> IndexOptions {
-        return IndexOptions {
-            follow: self.follow,
-            hidden: self.hidden,
-            language: self.language.into(),
-            ignore_files: self.ignore_files,
-            glob_case_insensitive: self.glob_case_insensitive,
-            glob: self.glob.clone(),
-            oglob: self.oglob.clone(),
-            threads: self.threads,
-        };
-    }
-}
 
 #[create_option_copy(SearchConfigOpt)]
 #[derive(Debug, Deserialize, Clone)]
@@ -67,6 +21,7 @@ pub struct SearchConfig {
     pub color: ColorMode,
     pub rebuild_index: bool,
     pub update: bool,
+    pub in_memory: bool,
 }
 
 impl Default for SearchConfig {
@@ -79,13 +34,14 @@ impl Default for SearchConfig {
             color: ColorMode::Auto,
             rebuild_index: false,
             update: true,
+            in_memory: false,
         };
     }
 }
 
 impl SearchConfig {
-    pub fn to_opts(&self, search_dir: &str) -> SearchOptions {
-        return SearchOptions {
+    pub fn to_opts(&self, search_dir: &str) -> FileSearchOptions {
+        return FileSearchOptions {
             limit: self.limit,
             threshold: self.threshold,
             filename_only: self.filename_only,
@@ -97,7 +53,7 @@ impl SearchConfig {
 pub fn load_config(
     path: &Path,
     index_name: Option<&str>,
-) -> Result<(IndexConfigOpt, SearchConfigOpt), anyhow::Error> {
+) -> Result<(FileIndexOptionsShape, SearchConfigOpt), anyhow::Error> {
     let path_str = path.to_string_lossy();
     let mut config_home = env::var("XDG_CONFIG_HOME").unwrap_or("".to_string());
     if config_home == "" {
@@ -109,7 +65,7 @@ pub fn load_config(
         let value = contents
             .parse::<Value>()
             .expect(&format!("Error parsing config file {:?}", config_file));
-        let mut index: IndexConfigOpt = value.clone().try_into()?;
+        let mut index: FileIndexOptionsShape = value.clone().try_into()?;
         let mut search: SearchConfigOpt = value.clone().try_into()?;
 
         let mut found_index = false;
@@ -147,16 +103,17 @@ pub fn load_config(
 
         return Ok((index, search));
     }
-    Ok((IndexConfigOpt::default(), SearchConfigOpt::default()))
+    Ok((FileIndexOptionsShape::default(), SearchConfigOpt::default()))
 }
 
 #[cfg(test)]
 mod tests {
     use std::{env, fs, path::PathBuf, str::FromStr};
 
+    use pore_core::FileIndexOptions;
     use toml::Value;
 
-    use crate::config::{IndexConfig, IndexConfigOpt, SearchConfigOpt};
+    use crate::config::{FileIndexOptionsShape, SearchConfigOpt};
 
     use super::{load_config, CONFIG_FILE};
 
@@ -166,7 +123,7 @@ mod tests {
 threads = 100
 limit = 4
 ";
-        let index: IndexConfigOpt = toml::from_str(contents).unwrap();
+        let index: FileIndexOptionsShape = toml::from_str(contents).unwrap();
         assert_eq!(index.follow, Some(false));
         assert_eq!(index.threads, Some(100));
         assert_eq!(index.ignore_files, None);
@@ -177,11 +134,11 @@ limit = 4
 
     #[test]
     fn merging_opt_configs_works() {
-        let mut i1 = IndexConfigOpt {
+        let mut i1 = FileIndexOptionsShape {
             follow: Some(true),
             ..Default::default()
         };
-        let i2 = IndexConfigOpt {
+        let i2 = FileIndexOptionsShape {
             threads: Some(20),
             ..Default::default()
         };
@@ -189,7 +146,7 @@ limit = 4
         assert_eq!(i1.follow, Some(true));
         assert_eq!(i1.threads, Some(20));
         assert_eq!(i1.language, None);
-        let conf: IndexConfig = i1.into();
+        let conf: FileIndexOptions = i1.into();
         assert_eq!(conf.follow, true);
         assert_eq!(conf.threads, 20);
         assert_eq!(conf.hidden, false);
@@ -235,7 +192,7 @@ limit = 4
         let value = contents
             .parse::<Value>()
             .expect(&format!("Error parsing config file {:?}", example));
-        let index: IndexConfigOpt = value.clone().try_into().unwrap();
+        let index: FileIndexOptionsShape = value.clone().try_into().unwrap();
         let search: SearchConfigOpt = value.clone().try_into().unwrap();
         if let Err(missing_fields) = index.all() {
             panic!("pore.example.toml is missing fields: {:?}", missing_fields);

@@ -1,13 +1,13 @@
 use std::io::Write;
 
-use pore_core::SearchResult;
+use pore_core::FileSearchResult;
 use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
 
 use crate::config::SearchConfig;
 
 /// Prints the search results to stdout
 pub fn print_results(
-    results: Vec<SearchResult>,
+    results: Vec<FileSearchResult>,
     conf: &SearchConfig,
 ) -> Result<bool, anyhow::Error> {
     let mut stdout = StandardStream::stdout(conf.color.clone().into());
@@ -26,9 +26,9 @@ pub fn print_results(
             writeln!(&mut stdout, "{}", result.file().to_string_lossy())?;
             for line in result.lines() {
                 stdout.set_color(&line_number_color)?;
-                write!(&mut stdout, "{}", line.number())?;
+                write!(&mut stdout, "{}", line.number)?;
                 stdout.set_color(&default_color)?;
-                writeln!(&mut stdout, ":{}", line.text())?;
+                writeln!(&mut stdout, ":{}", line.text)?;
             }
             if !conf.filename_only {
                 if i < results.len() - 1 {

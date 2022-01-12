@@ -11,7 +11,9 @@ use tantivy::{
     TERMINATED,
 };
 
-use crate::{BytePositions, FileIndex, Line};
+use crate::{FileIndex, Line};
+
+type BytePositions = BinaryHeap<Reverse<u32>>;
 
 #[derive(Debug)]
 pub struct DocResult {

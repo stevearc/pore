@@ -4,10 +4,11 @@ use std::{env, fs};
 
 use clap::ArgGroup;
 use clap::{App, Arg};
+use pore_core::language::LanguageRef;
+use pore_core::FileIndexOptionsShape;
 
 use crate::color_mode::ColorMode;
-use crate::config::{IndexConfigOpt, SearchConfigOpt};
-use crate::language::LanguageRef;
+use crate::config::SearchConfigOpt;
 
 #[derive(Debug)]
 pub enum CmdArg {
@@ -19,7 +20,7 @@ pub enum CmdArg {
 
 #[derive(Debug)]
 pub struct GlobalConfig {
-    pub index: IndexConfigOpt,
+    pub index: FileIndexOptionsShape,
     pub search: SearchConfigOpt,
     pub command: CmdArg,
     pub query: Option<String>,
@@ -205,7 +206,7 @@ pub fn parse_args() -> Result<GlobalConfig, anyhow::Error> {
         .arg(Arg::new("dir"))
         .get_matches();
 
-    let mut index = IndexConfigOpt::default();
+    let mut index = FileIndexOptionsShape::default();
     // Parse index options
     if matches.is_present("hidden") {
         index.hidden = Some(true);
@@ -251,11 +252,6 @@ pub fn parse_args() -> Result<GlobalConfig, anyhow::Error> {
     if matches.is_present("threads") {
         index.threads = Some(matches.value_of("threads").unwrap().parse::<usize>()?);
     }
-    if matches.is_present("in_memory") {
-        index.in_memory = Some(true);
-    } else if matches.is_present("no_memory") {
-        index.in_memory = Some(false);
-    }
 
     // Parse search options
     let mut search = SearchConfigOpt::default();
@@ -283,6 +279,11 @@ pub fn parse_args() -> Result<GlobalConfig, anyhow::Error> {
     } else if matches.is_present("update") {
         search.update = Some(true);
     };
+    if matches.is_present("in_memory") {
+        search.in_memory = Some(true);
+    } else if matches.is_present("no_memory") {
+        search.in_memory = Some(false);
+    }
 
     let mut command = CmdArg::Search;
     if matches.is_present("delete") {

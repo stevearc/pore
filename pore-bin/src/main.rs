@@ -3,8 +3,9 @@ extern crate anyhow;
 
 use args::CmdArg;
 use config::load_config;
-use config::{IndexConfig, SearchConfig};
+use config::SearchConfig;
 use pore_core::FileIndex;
+use pore_core::FileIndexOptions;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -13,7 +14,6 @@ use tantivy::query::QueryParser;
 mod args;
 mod color_mode;
 mod config;
-mod language;
 mod output;
 
 fn main() {
@@ -42,10 +42,10 @@ fn run_cmd() -> Result<bool, anyhow::Error> {
     } else {
         index_opt.merge_from(&conf.index);
     }
-    let index: IndexConfig = index_opt.into();
+    let index: FileIndexOptions = index_opt.into();
     let search: SearchConfig = search_opt.into();
 
-    let cache_dir = if index.in_memory {
+    let cache_dir = if search.in_memory {
         None
     } else {
         Some(find_index_dir(
@@ -53,8 +53,7 @@ fn run_cmd() -> Result<bool, anyhow::Error> {
             conf.index_name.as_deref(),
         )?)
     };
-    let mut index =
-        FileIndex::get_or_create(&conf.query_path, cache_dir.as_deref(), &index.into())?;
+    let mut index = FileIndex::get_or_create(conf.query_path, cache_dir, &index.into())?;
 
     match conf.command {
         CmdArg::Delete => {

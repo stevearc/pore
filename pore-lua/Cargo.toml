@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 mlua = { version = "0.7", features = ["async", "macros", "module"] }
+pore-core = { path = "../pore-core" }
+tantivy = "0.16.1"
 
 [lib]
 crate-type = ["cdylib"]

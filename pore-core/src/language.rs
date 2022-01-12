@@ -3,7 +3,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use tantivy::tokenizer::Language;
 
-#[derive(Debug, Deserialize, Serialize, Clone, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Copy, Clone, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum LanguageRef {
     Arabic,
